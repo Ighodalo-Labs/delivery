@@ -1,0 +1,91 @@
+name: Milestone daily check
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      force_summary:
+        description: 'Also post the weekly summary now'
+        type: boolean
+        default: false
+permissions:
+  issues: write
+  contents: read
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          FORCE_SUMMARY: ${{ github.event.inputs.force_summary }}
+        with:
+          script: |
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+            const weekday = new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Lagos', weekday: 'long' });
+            const addDays = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+            const diffDays = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
+            const ensureLabel = async (name, color, description) => {
+              try { await github.rest.issues.getLabel({ ...context.repo, name }); }
+              catch (e) { await github.rest.issues.createLabel({ ...context.repo, name, color, description }); }
+            };
+            const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open', labels: 'type:milestone', per_page: 100 });
+            const overdue = [], dueSoon = [], waiting = [];
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+              const labels = issue.labels.map((l) => l.name);
+              const has = (n) => labels.includes(n);
+              const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: issue.number, per_page: 100 });
+              const bot = comments.filter((c) => c.user && c.user.login === 'github-actions[bot]');
+              const marker = (re) => { for (const c of bot) { const m = c.body.match(re); if (m) return m[1]; } return ''; };
+              const origDue = marker(/<!-- original-due:(\d{4}-\d{2}-\d{2}) -->/);
+              if (!origDue) continue;
+              const paused = bot.reduce((s, c) => { const x = c.body.match(/<!-- pause:(\d+) -->/); return s + (x ? parseInt(x[1], 10) : 0); }, 0);
+              const effDue = addDays(origDue, paused);
+              const owner = (issue.assignees && issue.assignees[0]) ? '@' + issue.assignees[0].login : '';
+              const sent = (re) => bot.some((c) => re.test(c.body));
+              const submitted = has('submitted:on-time') || has('submitted:late');
+              const checked = has('check:first-pass') || has('check:final-pass');
+              const line = '- #' + issue.number + ' ' + issue.title.replace(/^\[Milestone\]\s*/, '') + ' (due ' + effDue + (owner ? ', ' + owner.slice(1) : '') + ')';
+
+              if (submitted) {
+                if (has('overdue')) { try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: issue.number, name: 'overdue' }); } catch (e) {} }
+                if (!checked) waiting.push(line);
+                continue;
+              }
+              if (today > effDue) {
+                overdue.push(line);
+                await ensureLabel('overdue', 'b60205', 'Past the agreed date and not submitted');
+                if (!has('overdue')) await github.rest.issues.addLabels({ ...context.repo, issue_number: issue.number, labels: ['overdue'] });
+                if (!sent(new RegExp('<!-- overdue-notice:' + effDue + ' -->'))) {
+                  await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: [
+                    (owner ? owner + ' ' : '') + 'this milestone is past its agreed date (' + effDue + ').',
+                    '',
+                    'If the work is ready, write `/submit`. If Labs caused a delay, tell the Studio Lead so the clock can be paused.',
+                    '',
+                    '<!-- overdue-notice:' + effDue + ' -->'
+                  ].join('\n') });
+                }
+              } else {
+                if (has('overdue')) { try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: issue.number, name: 'overdue' }); } catch (e) {} }
+                const left = diffDays(today, effDue);
+                if (left <= 7) dueSoon.push(line);
+                if (left <= 2 && !sent(new RegExp('<!-- reminder:' + effDue + ' -->'))) {
+                  await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: [
+                    (owner ? owner + ' ' : '') + 'reminder: this milestone is due ' + (left === 0 ? 'today' : 'in ' + left + ' day(s)') + ' (' + effDue + ').',
+                    '',
+                    'When it is ready, write `/submit`.',
+                    '',
+                    '<!-- reminder:' + effDue + ' -->'
+                  ].join('\n') });
+                }
+              }
+            }
+            if (weekday === 'Monday' || process.env.FORCE_SUMMARY === 'true') {
+              await ensureLabel('type:summary', 'ededed', 'Weekly summary');
+              const section = (title, arr) => '### ' + title + '\n\n' + (arr.length ? arr.join('\n') : 'None.') + '\n';
+              await github.rest.issues.create({ ...context.repo, title: 'Weekly summary ' + today, labels: ['type:summary'], body: [
+                section('Overdue', overdue),
+                section('Due in the next 7 days', dueSoon),
+                section('Submitted and waiting for the Studio Lead', waiting)
+              ].join('\n') });
+            }

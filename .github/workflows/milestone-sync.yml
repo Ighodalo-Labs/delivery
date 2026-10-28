@@ -1,0 +1,108 @@
+name: Milestone sync
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+permissions:
+  issues: write
+  contents: read
+concurrency:
+  group: sync-${{ github.event.issue.number }}
+  cancel-in-progress: true
+jobs:
+  sync:
+    if: ${{ !github.event.issue.pull_request && contains(github.event.issue.labels.*.name, 'type:milestone') && (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        with:
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const isOpen = context.eventName === 'issues';
+            await new Promise((r) => setTimeout(r, 20000));
+
+            const gql = async (query, variables) => {
+              const res = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + process.env.PROJECT_TOKEN, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, variables })
+              });
+              const j = await res.json();
+              if (j.errors) throw new Error(JSON.stringify(j.errors));
+              return j.data;
+            };
+
+            const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number: issueNumber });
+            const labels = issue.labels.map((l) => l.name);
+            const has = (n) => labels.includes(n);
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: issueNumber, per_page: 100 });
+            const bot = comments.filter((c) => c.user && c.user.login === 'github-actions[bot]');
+            const marker = (re) => { for (const c of bot) { const m = c.body.match(re); if (m) return m[1]; } return ''; };
+            const origDue = marker(/<!-- original-due:(\d{4}-\d{2}-\d{2}) -->/);
+            const start = marker(/<!-- start:(\d{4}-\d{2}-\d{2}) -->/);
+            const submitted = marker(/<!-- submitted:(\d{4}-\d{2}-\d{2}) -->/);
+            const paused = bot.reduce((s, c) => { const x = c.body.match(/<!-- pause:(\d+) -->/); return s + (x ? parseInt(x[1], 10) : 0); }, 0);
+            const addDays = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+            const effDue = origDue ? addDays(origDue, paused) : '';
+            const body = issue.body || '';
+            const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const field = (label) => { const re = new RegExp('###\\s+' + esc(label) + '\\s*\\n+([\\s\\S]*?)(?=\\n###\\s|$)', 'i'); const m = body.match(re); return m ? m[1].trim() : ''; };
+            const venture = field('Venture');
+            const reward = field('Reward type');
+            const agreedOn = new Date(issue.created_at).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+            const proj = (await gql(`query { organization(login:"Ighodalo-Labs") { projectV2(number:1) { id fields(first:60) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } } } } } }`)).organization.projectV2;
+            const fields = proj.fields.nodes.filter((f) => f && f.name);
+
+            let itemId = '';
+            for (let i = 0; i < 8 && !itemId; i++) {
+              const r = await gql(`query($id:ID!) { node(id:$id) { ... on Issue { projectItems(first:20) { nodes { id project { id } } } } } }`, { id: issue.node_id });
+              const it = r.node.projectItems.nodes.find((n) => n.project.id === proj.id);
+              if (it) itemId = it.id; else await new Promise((r2) => setTimeout(r2, 5000));
+            }
+            if (!itemId) {
+              itemId = (await gql(`mutation($p:ID!,$c:ID!) { addProjectV2ItemById(input:{projectId:$p, contentId:$c}) { item { id } } }`, { p: proj.id, c: issue.node_id })).addProjectV2ItemById.item.id;
+            }
+
+            const notes = [];
+            const setVal = async (name, value) => {
+              if (value === '' || value === undefined || value === null) return;
+              const f = fields.find((x) => x.name.toLowerCase() === name.toLowerCase());
+              if (!f) { notes.push('No project field named "' + name + '".'); return; }
+              let v;
+              if (f.dataType === 'DATE') v = { date: String(value) };
+              else if (f.dataType === 'NUMBER') v = { number: Number(value) };
+              else if (f.dataType === 'SINGLE_SELECT') {
+                const o = (f.options || []).find((x) => x.name.toLowerCase() === String(value).toLowerCase());
+                if (!o) { notes.push('Field "' + name + '" has no option "' + value + '".'); return; }
+                v = { singleSelectOptionId: o.id };
+              } else v = { text: String(value) };
+              try {
+                await gql(`mutation($p:ID!,$i:ID!,$f:ID!,$v:ProjectV2FieldValue!) { updateProjectV2ItemFieldValue(input:{projectId:$p, itemId:$i, fieldId:$f, value:$v}) { projectV2Item { id } } }`, { p: proj.id, i: itemId, f: f.id, v });
+              } catch (e) { notes.push('"' + name + '" (' + f.dataType + '): ' + e.message.slice(0, 220)); }
+            };
+
+            let status = '';
+            if (has('check:first-pass') || has('check:final-pass')) status = 'Done';
+            else if (has('check:rework')) status = 'In progress';
+            else if (has('submitted:on-time') || has('submitted:late')) status = 'Ready for check';
+            else if (isOpen) status = 'Agreed';
+
+            await setVal('Status', status);
+            await setVal('Venture', venture);
+            await setVal('Reward type', reward);
+            await setVal('Original due date', origDue);
+            await setVal('Agreed on', agreedOn);
+            await setVal('Submitted on', submitted);
+            await setVal('Clock paused days', paused);
+            await setVal('Start date', start);
+            await setVal('Target date', effDue);
+            await setVal('First check', has('check:first-pass') ? 'Pass' : (has('check:rework') ? 'Rework needed' : 'Pending'));
+            await setVal('On-Time Bonus', has('bonus:earned') ? 'Earned' : (has('bonus:missed') ? 'Missed' : 'Pending'));
+
+            if (notes.length) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issueNumber, body: '**Sync note.** Some project fields could not be updated:\n\n- ' + notes.join('\n- ') });
+            }
