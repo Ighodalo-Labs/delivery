@@ -1,0 +1,88 @@
+name: Milestone
+description: One agreed unit of work with an owner, a due date and a clear definition of done.
+title: "[Milestone] "
+labels: ["type:milestone"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agree the date together before work starts. If a date looks too tight, say so now. The base fee is paid when this passes the definition of done. The On-Time Bonus is paid when it is submitted by the agreed date and passes the first check.
+  - type: dropdown
+    id: venture
+    attributes:
+      label: Venture
+      options:
+        - Ighodalo Labs Website
+        - MyPropGuard
+        - MyPropGuard On-chain
+        - Tickwire
+        - Cleanse.ng
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: reward
+    attributes:
+      label: Reward type
+      options:
+        - Milestone-based
+        - Time-based
+    validations:
+      required: true
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Deliverable
+      description: What will exist when this is done? One or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+    validations:
+      required: true
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of done
+      description: A checklist. Every line must be something you can test with yes or no.
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: How it will be checked
+      description: The exact steps the reviewer will follow.
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Owner (GitHub username)
+    validations:
+      required: true
+  - type: input
+    id: start
+    attributes:
+      label: Start date (YYYY-MM-DD)
+    validations:
+      required: true
+  - type: input
+    id: due
+    attributes:
+      label: Agreed due date (YYYY-MM-DD)
+      description: A real date, not "before launch". Agreed by both sides.
+    validations:
+      required: true
+  - type: checkboxes
+    id: agreed
+    attributes:
+      label: Agreement
+      options:
+        - label: The owner and Labs both agree to this scope and this date.
+          required: true
