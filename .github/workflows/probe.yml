@@ -12,7 +12,7 @@ jobs:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         with:
           script: |
-            const gh = github.getOctokit(process.env.PROJECT_TOKEN);
+            const gh = require('@actions/github').getOctokit(process.env.PROJECT_TOKEN);
             const out = [];
             try {
               const r = await gh.graphql(`query { organization(login:"Ighodalo-Labs") { projectV2(number:1) { id title fields(first:50) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } } } } } }`);
