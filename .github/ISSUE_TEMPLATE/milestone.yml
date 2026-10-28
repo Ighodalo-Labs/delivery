@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Agree the date together before work starts. If a date looks too tight, say so now. The base fee is paid when this passes the definition of done. The On-Time Bonus is paid when it is submitted by the agreed date and passes the first check.
+        Agree the date together before work starts. If a date looks too tight, say so now. The stipend is paid when this passes the definition of done. The On-Time Bonus is paid on top when it is submitted by the agreed date and passes the first check.
   - type: dropdown
     id: venture
     attributes:
@@ -48,9 +48,9 @@ body:
       label: Definition of done
       description: A checklist. Every line must be something you can test with yes or no.
       value: |
-        - [ ] 
-        - [ ] 
-        - [ ] 
+        - [ ]
+        - [ ]
+        - [ ]
     validations:
       required: true
   - type: textarea
