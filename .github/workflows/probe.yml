@@ -12,7 +12,12 @@ jobs:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         with:
           script: |
-            const gh = require('@actions/github').getOctokit(process.env.PROJECT_TOKEN);
+            const gh = { graphql: async (query, variables) => {
+              const res = await fetch('https://api.github.com/graphql', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.PROJECT_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
+              const j = await res.json();
+              if (j.errors) throw new Error(JSON.stringify(j.errors));
+              return j.data;
+            } };
             const out = [];
             try {
               const r = await gh.graphql(`query { organization(login:"Ighodalo-Labs") { projectV2(number:1) { id title fields(first:50) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } } } } } }`);
