@@ -1,0 +1,76 @@
+name: Milestone intake
+on:
+  issues:
+    types: [opened]
+permissions:
+  issues: write
+  contents: read
+jobs:
+  intake:
+    if: ${{ contains(github.event.issue.labels.*.name, 'type:milestone') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+            const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const field = (label) => {
+              const re = new RegExp('###\\s+' + esc(label) + '\\s*\\n+([\\s\\S]*?)(?=\\n###\\s|$)', 'i');
+              const m = body.match(re);
+              return m ? m[1].trim() : '';
+            };
+            const owner = field('Owner (GitHub username)').replace(/^@/, '');
+            const start = field('Start date (YYYY-MM-DD)');
+            const due = field('Agreed due date (YYYY-MM-DD)');
+            const reward = field('Reward type');
+            const dateOk = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d));
+            const say = (text) => github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: text });
+
+            const notes = [];
+            if (owner) {
+              try {
+                await github.rest.issues.addAssignees({ ...context.repo, issue_number: issue.number, assignees: [owner] });
+              } catch (e) {
+                notes.push('Could not assign @' + owner + '. Please check the username and that this person has access to this repo.');
+              }
+            } else {
+              notes.push('No owner was given. Please add one.');
+            }
+
+            const rewardLabel = /time/i.test(reward) ? 'reward:time' : (/milestone/i.test(reward) ? 'reward:milestone' : '');
+            if (rewardLabel) {
+              try { await github.rest.issues.addLabels({ ...context.repo, issue_number: issue.number, labels: [rewardLabel] }); } catch (e) {}
+            }
+
+            if (!dateOk(start) || !dateOk(due)) {
+              notes.push('The start date or the due date is not a real date in YYYY-MM-DD format. Please edit the issue and fix it. The clock cannot start until both dates are valid.');
+              await say(notes.join('\n\n'));
+              return;
+            }
+            if (due < start) {
+              notes.push('The due date is before the start date. Please fix it.');
+              await say(notes.join('\n\n'));
+              return;
+            }
+
+            const text = [
+              '**Milestone agreed.**',
+              '',
+              'Owner: @' + owner,
+              'Start: ' + start,
+              'Due: ' + due + ' (this date is locked)',
+              '',
+              'Commands. Write one on the first line of a comment:',
+              '- `/submit` (owner). The work is ready for check. This stops the clock.',
+              '- `/pause N reason` (Studio Lead). Pauses the clock N days for a Labs delay.',
+              '- `/pass` or `/rework` (Studio Lead). Records the first check.',
+              '',
+              'Then move the item to Ready for check on the project board.',
+              '',
+              '<!-- original-due:' + due + ' -->',
+              '<!-- start:' + start + ' -->'
+            ];
+            if (notes.length) { text.push('', notes.join('\n\n')); }
+            await say(text.join('\n'));

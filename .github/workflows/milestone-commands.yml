@@ -1,0 +1,147 @@
+name: Milestone commands
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  issues: write
+  contents: read
+jobs:
+  command:
+    if: ${{ !github.event.issue.pull_request && contains(github.event.issue.labels.*.name, 'type:milestone') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment;
+            const issue = context.payload.issue;
+            const first = (comment.body || '').split('\n')[0].trim();
+            const m = first.match(/^\/(submit|pause|pass|rework)(?:\s+(.*))?$/i);
+            if (!m) return;
+            const cmd = m[1].toLowerCase();
+            const arg = (m[2] || '').trim();
+            const actor = comment.user.login;
+            const labels = issue.labels.map((l) => l.name);
+            const has = (n) => labels.includes(n);
+            const say = (text) => github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: text });
+            const react = (content) => github.rest.reactions.createForIssueComment({ ...context.repo, comment_id: comment.id, content });
+            const addLabel = async (name, color, description) => {
+              try { await github.rest.issues.getLabel({ ...context.repo, name }); }
+              catch (e) { await github.rest.issues.createLabel({ ...context.repo, name, color, description }); }
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: issue.number, labels: [name] });
+              labels.push(name);
+            };
+
+            let isStaff = false;
+            try {
+              const p = await github.rest.repos.getCollaboratorPermissionLevel({ ...context.repo, username: actor });
+              isStaff = ['admin', 'maintain'].includes(p.data.permission);
+            } catch (e) {}
+
+            const all = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: issue.number, per_page: 100 });
+            const bot = all.filter((c) => c.user && c.user.login === 'github-actions[bot]');
+            let due = '';
+            for (const c of bot) {
+              const x = c.body.match(/<!-- original-due:(\d{4}-\d{2}-\d{2}) -->/);
+              if (x) { due = x[1]; break; }
+            }
+            const pausedDays = bot.reduce((sum, c) => {
+              const x = c.body.match(/<!-- pause:(\d+) -->/);
+              return sum + (x ? parseInt(x[1], 10) : 0);
+            }, 0);
+            const addDays = (d, n) => {
+              const t = new Date(d + 'T00:00:00Z');
+              t.setUTCDate(t.getUTCDate() + n);
+              return t.toISOString().slice(0, 10);
+            };
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+            if (!due) {
+              await say('There is no agreed date on record for this milestone, so I cannot run `/' + cmd + '`. Please check the dates in the issue.');
+              return;
+            }
+            const effectiveDue = addDays(due, pausedDays);
+            const assigned = (issue.assignees || []).some((a) => a.login === actor);
+
+            if (cmd === 'submit') {
+              if (!assigned && !isStaff) {
+                await say('@' + actor + ' only the owner or the Studio Lead can use `/submit`.');
+                return;
+              }
+              if (has('submitted:on-time') || has('submitted:late')) {
+                await say('Resubmission noted on ' + today + '. The first submission stays on record.');
+                await react('+1');
+                return;
+              }
+              const onTime = today <= effectiveDue;
+              await addLabel(onTime ? 'submitted:on-time' : 'submitted:late', onTime ? '0e8a16' : 'd93f0b', onTime ? 'Submitted by the agreed date' : 'Submitted after the agreed date');
+              await say([
+                '**Submitted on ' + today + '** (Lagos time).',
+                'Agreed due date: ' + due + (pausedDays ? ' plus ' + pausedDays + ' paused day(s) = ' + effectiveDue : '') + '.',
+                onTime ? 'On time.' : 'After the agreed date. The stipend is still paid when this passes. The On-Time Bonus does not apply.',
+                '',
+                'Please move the item to Ready for check.',
+                '',
+                '<!-- submitted:' + today + ' -->'
+              ].join('\n'));
+              await react('+1');
+              return;
+            }
+
+            if (!isStaff) {
+              await say('@' + actor + ' only the Studio Lead can use `/' + cmd + '`.');
+              return;
+            }
+
+            if (cmd === 'pause') {
+              const pm = arg.match(/^(\d{1,2})\s*(.*)$/);
+              if (!pm || parseInt(pm[1], 10) < 1) {
+                await say('Use `/pause N reason`, where N is the number of days (1 to 99). Example: `/pause 3 Waiting for server access`.');
+                return;
+              }
+              const n = parseInt(pm[1], 10);
+              const reason = pm[2] || 'No reason given';
+              const newDue = addDays(due, pausedDays + n);
+              if (!has('clock:paused')) { await addLabel('clock:paused', 'fbca04', 'Clock paused because of a Labs delay'); }
+              await say([
+                '**Clock paused for ' + n + ' day(s).** Reason: ' + reason,
+                'New due date: ' + newDue + '. Original due date stays ' + due + '.',
+                '',
+                'Please set the Target date on the project board to ' + newDue + ' and put ' + (pausedDays + n) + ' in Clock paused days.',
+                '',
+                '<!-- pause:' + n + ' -->'
+              ].join('\n'));
+              await react('+1');
+              return;
+            }
+
+            // /pass and /rework
+            const firstDone = has('check:first-pass') || has('check:rework');
+            if (!has('submitted:on-time') && !has('submitted:late')) {
+              await say('There is no submission on record yet. The owner needs to use `/submit` first.');
+              return;
+            }
+            if (cmd === 'pass') {
+              if (firstDone) {
+                await addLabel('check:final-pass', '0e8a16', 'Passed after rework');
+                await say('Passed after rework. The stipend is due. The On-Time Bonus stays as recorded at the first check.');
+              } else {
+                await addLabel('check:first-pass', '0e8a16', 'Passed the first check');
+                if (has('submitted:on-time')) {
+                  await addLabel('bonus:earned', '1d76db', 'On-Time Bonus earned');
+                  await say('**First check passed, and it was submitted on time.** The stipend and the On-Time Bonus are due.');
+                } else {
+                  await addLabel('bonus:missed', 'b60205', 'On-Time Bonus not earned');
+                  await say('**First check passed, but it was submitted after the agreed date.** The stipend is due. The On-Time Bonus does not apply.');
+                }
+              }
+            } else {
+              if (firstDone) {
+                await say('More rework recorded. The first check result stays on record.');
+              } else {
+                await addLabel('check:rework', 'e99695', 'Needed rework at the first check');
+                await addLabel('bonus:missed', 'b60205', 'On-Time Bonus not earned');
+                await say('**Rework needed at the first check.** Please see the notes above. The stipend is still due once it passes. The On-Time Bonus does not apply.');
+              }
+            }
+            await react('+1');
