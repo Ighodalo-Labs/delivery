@@ -13,6 +13,8 @@ It is for everyone: developers, designers, marketers, content and social media p
 
 You never need to edit the board. It updates itself.
 
+If the reviewer asks for rework, fix it and write `/submit` again. The item goes back to Ready for check. Only people on the team can create milestones. If a date in the form is wrong, edit the issue and fix it before the agreement is posted.
+
 ## What a milestone is
 
 A milestone is one agreed unit of work. It has an owner, a due date and a clear definition of done. We agree the date together before work starts. If a date looks too tight, say so before we lock it.
