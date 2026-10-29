@@ -82,7 +82,7 @@ jobs:
               } else v = { text: String(value) };
               try {
                 await gql(`mutation($p:ID!,$i:ID!,$f:ID!,$v:ProjectV2FieldValue!) { updateProjectV2ItemFieldValue(input:{projectId:$p, itemId:$i, fieldId:$f, value:$v}) { projectV2Item { id } } }`, { p: proj.id, i: itemId, f: f.id, v });
-              } catch (e) { notes.push('"' + name + '" (' + f.dataType + '): ' + e.message.slice(0, 220)); }
+              } catch (e) { notes.push('"' + name + '" (' + f.dataType + '): ' + e.message.slice(0, 600)); }
             };
 
             let status = '';
@@ -98,8 +98,19 @@ jobs:
             await setVal('Agreed on', agreedOn);
             await setVal('Submitted on', submitted);
             await setVal('Clock paused days', paused);
-            await setVal('Start date', start);
-            await setVal('Target date', effDue);
+            const setIssueDate = async (name, value) => {
+              if (!value) return;
+              try {
+                const hdr = { Authorization: 'Bearer ' + process.env.PROJECT_TOKEN, 'Content-Type': 'application/json', 'GraphQL-Features': 'issue_fields' };
+                const call = async (query) => { const res = await fetch('https://api.github.com/graphql', { method: 'POST', headers: hdr, body: JSON.stringify({ query }) }); const j = await res.json(); if (j.errors) throw new Error(JSON.stringify(j.errors)); return j.data; };
+                const list = (await call('query { organization(login:"Ighodalo-Labs") { issueFields(first:30) { nodes { __typename ... on IssueFieldDate { id name } } } } }')).organization.issueFields.nodes;
+                const f = list.find((x) => x && x.name && x.name.toLowerCase() === name.toLowerCase());
+                if (!f) { notes.push('No issue field named "' + name + '".'); return; }
+                await call('mutation { setIssueFieldValue(input:{ issueId:"' + issue.node_id + '", issueFields:[{ fieldId:"' + f.id + '", dateValue:"' + value + '" }] }) { issue { id } } }');
+              } catch (e) { notes.push('"' + name + '" (issue field): ' + e.message.slice(0, 600)); }
+            };
+            await setIssueDate('Start date', start);
+            await setIssueDate('Target date', effDue);
             await setVal('First check', has('check:first-pass') ? 'Pass' : (has('check:rework') ? 'Rework needed' : 'Pending'));
             await setVal('On-Time Bonus', has('bonus:earned') ? 'Earned' : (has('bonus:missed') ? 'Missed' : 'Pending'));
 
