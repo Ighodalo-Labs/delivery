@@ -74,6 +74,11 @@ jobs:
               await say(notes.join('\n\n'));
               return;
             }
+            if (due > addDays(start, 31)) {
+              notes.push('This milestone is longer than one month. Please split it into smaller milestones, or move the due date to ' + addDays(start, 31) + ' or earlier. Then edit the issue. The clock has not started.');
+              await say(notes.join('\n\n'));
+              return;
+            }
 
             const text = [
               '**Milestone agreed.**',
