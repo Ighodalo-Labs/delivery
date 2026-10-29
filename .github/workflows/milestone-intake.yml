@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   intake:
-    if: ${{ contains(github.event.issue.labels.*.name, 'type:milestone') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association) }}
+    if: ${{ contains(github.event.issue.labels.*.name, 'type:milestone') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
