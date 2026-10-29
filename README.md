@@ -26,7 +26,7 @@ The form asks for:
 - **Owner**. The person who does the work.
 - **Reviewer** (optional). The person who checks it. Empty means the Studio Lead. It cannot be the owner.
 - **Start date** (optional). Empty means today.
-- **Due date**. A date like `2026-11-20` or a number of days like `14 days`.
+- **Due date**. A date like `2026-11-20` or a number of days like `14 days`. One month at most from the start.
 
 ## How pay works
 
@@ -97,7 +97,7 @@ Anyone can read this repository. Do not write passwords, keys, client names or p
 
 ## Good milestones
 
-- Small. Two weeks at most.
+- One month at most from the start date. If it is longer, split it into smaller milestones. The system will not start the clock on a longer one.
 - Every line in the definition of done can be answered with yes or no.
 - One owner.
 - A reviewer who is not the owner.
