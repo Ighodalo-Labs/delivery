@@ -1,0 +1,16 @@
+[
+  {
+    "enabled": false,
+    "title": "Weekly content",
+    "venture": "Other",
+    "role": "Content",
+    "reward": "Time-based",
+    "owner": "github-username",
+    "reviewer": "",
+    "deliverable": "This week's agreed posts are live.",
+    "why": "Steady posting builds the audience.",
+    "definition_of_done": ["All agreed posts are live", "Each post has a link in the proof"],
+    "how_checked": "The reviewer opens every link and reads the post.",
+    "days": 7
+  }
+]
