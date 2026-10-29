@@ -98,19 +98,15 @@ jobs:
             await setVal('Agreed on', agreedOn);
             await setVal('Submitted on', submitted);
             await setVal('Clock paused days', paused);
-            const setIssueDate = async (name, value) => {
-              if (!value) return;
-              try {
-                const hdr = { Authorization: 'Bearer ' + process.env.PROJECT_TOKEN, 'Content-Type': 'application/json', 'GraphQL-Features': 'issue_fields' };
-                const call = async (query) => { const res = await fetch('https://api.github.com/graphql', { method: 'POST', headers: hdr, body: JSON.stringify({ query }) }); const j = await res.json(); if (j.errors) throw new Error(JSON.stringify(j.errors)); return j.data; };
-                const list = (await call('query { organization(login:"Ighodalo-Labs") { issueFields(first:30) { nodes { __typename ... on IssueFieldDate { id name } } } } }')).organization.issueFields.nodes;
-                const f = list.find((x) => x && x.name && x.name.toLowerCase() === name.toLowerCase());
-                if (!f) { notes.push('No issue field named "' + name + '".'); return; }
-                await call('mutation { setIssueFieldValue(input:{ issueId:"' + issue.node_id + '", issueFields:[{ fieldId:"' + f.id + '", dateValue:"' + value + '" }] }) { issue { id } } }');
-              } catch (e) { notes.push('"' + name + '" (issue field): ' + e.message.slice(0, 600)); }
-            };
-            await setIssueDate('Start date', start);
-            await setIssueDate('Target date', effDue);
+            try {
+              const vals = [];
+              if (start) vals.push({ field_id: 44575661, value: start });
+              if (effDue) vals.push({ field_id: 44575662, value: effDue });
+              if (vals.length) {
+                const res = await fetch('https://api.github.com/repos/' + context.repo.owner + '/' + context.repo.repo + '/issues/' + issueNumber + '/issue-field-values', { method: 'PUT', headers: { Authorization: 'Bearer ' + process.env.PROJECT_TOKEN, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_field_values: vals }) });
+                if (!res.ok) throw new Error(res.status + ' ' + (await res.text()));
+              }
+            } catch (e) { notes.push('Start/Target date (issue fields): ' + e.message.slice(0, 600)); }
             await setVal('First check', has('check:first-pass') ? 'Pass' : (has('check:rework') ? 'Rework needed' : 'Pending'));
             await setVal('On-Time Bonus', has('bonus:earned') ? 'Earned' : (has('bonus:missed') ? 'Missed' : 'Pending'));
 
