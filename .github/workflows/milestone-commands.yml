@@ -16,9 +16,10 @@ jobs:
             const comment = context.payload.comment;
             const issue = context.payload.issue;
             const first = (comment.body || '').split('\n')[0].trim();
-            const m = first.match(/^\/(submit|pause|pass|rework)(?:\s+(.*))?$/i);
+            const m = first.match(/^\/(submit|done|pause|pass|approve|rework|redo|rescope)(?:\s+(.*))?$/i);
             if (!m) return;
-            const cmd = m[1].toLowerCase();
+            const aliases = { done: 'submit', approve: 'pass', redo: 'rework' };
+            const cmd = aliases[m[1].toLowerCase()] || m[1].toLowerCase();
             const arg = (m[2] || '').trim();
             const actor = comment.user.login;
             const labels = issue.labels.map((l) => l.name);
@@ -33,9 +34,11 @@ jobs:
             };
 
             let isStaff = false;
+            let isAdmin = false;
             try {
               const p = await github.rest.repos.getCollaboratorPermissionLevel({ ...context.repo, username: actor });
               isStaff = ['admin', 'maintain'].includes(p.data.permission);
+              isAdmin = p.data.permission === 'admin';
             } catch (e) {}
 
             const all = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: issue.number, per_page: 100 });
@@ -45,6 +48,12 @@ jobs:
               const x = c.body.match(/<!-- original-due:(\d{4}-\d{2}-\d{2}) -->/);
               if (x) { due = x[1]; break; }
             }
+            let reviewer = '';
+            for (const c of bot) {
+              const x = c.body.match(/<!-- reviewer:([A-Za-z0-9-]+) -->/);
+              if (x) { reviewer = x[1]; break; }
+            }
+            const isReviewer = !!reviewer && reviewer.toLowerCase() === actor.toLowerCase();
             const pausedDays = bot.reduce((sum, c) => {
               const x = c.body.match(/<!-- pause:(\d+) -->/);
               return sum + (x ? parseInt(x[1], 10) : 0);
@@ -62,6 +71,7 @@ jobs:
             }
             const effectiveDue = addDays(due, pausedDays);
             const assigned = (issue.assignees || []).some((a) => a.login === actor);
+            const evidence = arg.replace(/<!--|-->/g, '').replace(/[\r\n]+/g, ' ').slice(0, 300);
 
             if (cmd === 'submit') {
               if (!assigned && !isStaff) {
@@ -69,7 +79,7 @@ jobs:
                 return;
               }
               if (has('submitted:on-time') || has('submitted:late')) {
-                await say('Resubmission noted on ' + today + '. The first submission stays on record.');
+                await say('Resubmission noted on ' + today + '. The first submission stays on record.' + (evidence ? '\n\nNew proof: ' + evidence + '\n\n<!-- evidence:' + evidence + ' -->' : ''));
                 await react('+1');
                 return;
               }
@@ -80,16 +90,42 @@ jobs:
                 'Agreed due date: ' + due + (pausedDays ? ' plus ' + pausedDays + ' paused day(s) = ' + effectiveDue : '') + '.',
                 onTime ? 'On time.' : 'After the agreed date. The stipend is still paid when this passes. The On-Time Bonus does not apply.',
                 '',
-                'Please move the item to Ready for check.',
+                evidence ? 'Proof: ' + evidence : 'No proof was added. Next time write `/submit` and a link or a short note, so the reviewer can check faster.',
                 '',
                 '<!-- submitted:' + today + ' -->'
-              ].join('\n'));
+              ].concat(evidence ? ['<!-- evidence:' + evidence + ' -->'] : []).join('\n'));
               await react('+1');
               return;
             }
 
-            if (!isStaff) {
-              await say('@' + actor + ' only the Studio Lead can use `/' + cmd + '`.');
+            if (!isStaff && !isReviewer) {
+              await say('@' + actor + ' only the reviewer or the Studio Lead can use `/' + cmd + '`.');
+              return;
+            }
+            if (assigned && !isAdmin) {
+              await say('@' + actor + ' the owner cannot check their own work. The reviewer or the Studio Lead will do it.');
+              return;
+            }
+
+            if (cmd === 'rescope') {
+              const rm = arg.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/);
+              if (!rm || isNaN(Date.parse(rm[1]))) {
+                await say('Use `/rescope YYYY-MM-DD reason`. Example: `/rescope 2026-12-01 Scope grew after the review`.');
+                return;
+              }
+              const diff = Math.round((Date.parse(rm[1] + 'T00:00:00Z') - Date.parse(effectiveDue + 'T00:00:00Z')) / 86400000);
+              if (diff < 1) {
+                await say('The new date must be later than the current due date (' + effectiveDue + '). Dates can only move later.');
+                return;
+              }
+              if (!has('scope:changed')) { await addLabel('scope:changed', 'c5def5', 'Scope changed and the date was moved'); }
+              await say([
+                '**Scope changed. Date moved to ' + rm[1] + '.** Reason: ' + (rm[2] || 'No reason given'),
+                'Original due date stays ' + due + ' on record.',
+                '',
+                '<!-- pause:' + diff + ' -->'
+              ].join('\n'));
+              await react('+1');
               return;
             }
 
@@ -106,8 +142,6 @@ jobs:
               await say([
                 '**Clock paused for ' + n + ' day(s).** Reason: ' + reason,
                 'New due date: ' + newDue + '. Original due date stays ' + due + '.',
-                '',
-                'Please set the Target date on the project board to ' + newDue + ' and put ' + (pausedDays + n) + ' in Clock paused days.',
                 '',
                 '<!-- pause:' + n + ' -->'
               ].join('\n'));

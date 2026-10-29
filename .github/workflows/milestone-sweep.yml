@@ -83,9 +83,24 @@ jobs:
             if (weekday === 'Monday' || process.env.FORCE_SUMMARY === 'true') {
               await ensureLabel('type:summary', 'ededed', 'Weekly summary');
               const section = (title, arr) => '### ' + title + '\n\n' + (arr.length ? arr.join('\n') : 'None.') + '\n';
+              const closed = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'closed', labels: 'type:milestone', since: addDays(today, -8) + 'T00:00:00Z', per_page: 100 });
+              const recent = closed.filter((i) => !i.pull_request && i.closed_at && i.closed_at.slice(0, 10) >= addDays(today, -7));
+              const names = (i) => i.labels.map((l) => l.name);
+              const passed = recent.filter((i) => names(i).includes('check:first-pass') || names(i).includes('check:final-pass'));
+              const firstPass = recent.filter((i) => names(i).includes('check:first-pass'));
+              const bonus = recent.filter((i) => names(i).includes('bonus:earned'));
+              const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : 'n/a');
+              const numbers = [
+                '- Milestones passed this week: ' + passed.length,
+                '- Passed at the first check: ' + firstPass.length + ' (' + pct(firstPass.length, passed.length) + ')',
+                '- On-Time Bonus earned: ' + bonus.length + ' (' + pct(bonus.length, passed.length) + ')',
+                '- Open and overdue right now: ' + overdue.length,
+                ''
+              ];
               await github.rest.issues.create({ ...context.repo, title: 'Weekly summary ' + today, labels: ['type:summary'], body: [
+                '### Numbers for the last 7 days\n\n' + numbers.join('\n'),
                 section('Overdue', overdue),
                 section('Due in the next 7 days', dueSoon),
-                section('Submitted and waiting for the Studio Lead', waiting)
+                section('Submitted and waiting for check', waiting)
               ].join('\n') });
             }

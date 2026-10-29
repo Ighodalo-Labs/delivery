@@ -1,0 +1,51 @@
+name: Milestone recurring
+on:
+  schedule:
+    - cron: '30 4 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        with:
+          script: |
+            const fs = require('fs');
+            let list = [];
+            try { list = JSON.parse(fs.readFileSync('.github/recurring.json', 'utf8')); } catch (e) { core.setFailed('Could not read .github/recurring.json: ' + e.message); return; }
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+            const api = async (method, path, body) => {
+              const res = await fetch('https://api.github.com' + path, { method, headers: { Authorization: 'Bearer ' + process.env.PROJECT_TOKEN, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+              const j = await res.json();
+              if (!res.ok) throw new Error(res.status + ' ' + JSON.stringify(j).slice(0, 300));
+              return j;
+            };
+            const repo = context.repo.owner + '/' + context.repo.repo;
+            for (const r of list) {
+              if (r.enabled === false) continue;
+              const title = '[Milestone] ' + r.title + ' (week of ' + today + ')';
+              const found = await api('GET', '/search/issues?q=' + encodeURIComponent('repo:' + repo + ' is:issue in:title "' + r.title + ' (week of ' + today + ')"'));
+              if (found.total_count > 0) { core.info('Already exists: ' + title); continue; }
+              const dod = (r.definition_of_done || []).map((x) => '- [ ] ' + x).join('\n') || '- [ ] Done';
+              const body = [
+                '### Venture', r.venture || 'Other',
+                '### Role', r.role || 'Other',
+                '### Reward type', r.reward || 'Milestone-based',
+                '### Deliverable', r.deliverable || r.title,
+                '### Why it matters', r.why || 'Repeating work.',
+                '### Definition of done', dod,
+                '### How it will be checked', r.how_checked || 'The reviewer opens the proof links.',
+                '### Owner (GitHub username)', r.owner || '',
+                '### Reviewer (GitHub username, optional)', r.reviewer || '_No response_',
+                '### Start date (YYYY-MM-DD, optional)', '_No response_',
+                '### Agreed due date', String(r.days || 7) + ' days'
+              ].reduce((acc, x, i) => acc + (i % 2 === 0 ? (i ? '\n\n' : '') + x + '\n\n' : x), '');
+              await api('POST', '/repos/' + repo + '/issues', { title, body, labels: ['type:milestone'] });
+              core.info('Created: ' + title);
+            }

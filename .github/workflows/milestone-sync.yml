@@ -22,7 +22,7 @@ jobs:
           script: |
             const issueNumber = context.payload.issue.number;
             const isOpen = context.eventName === 'issues';
-            await new Promise((r) => setTimeout(r, 20000));
+            await new Promise((r) => setTimeout(r, 6000));
 
             const gql = async (query, variables) => {
               const res = await fetch('https://api.github.com/graphql', {
@@ -41,6 +41,7 @@ jobs:
             const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: issueNumber, per_page: 100 });
             const bot = comments.filter((c) => c.user && c.user.login === 'github-actions[bot]');
             const marker = (re) => { for (const c of bot) { const m = c.body.match(re); if (m) return m[1]; } return ''; };
+            const lastMarker = (re) => { for (let i = bot.length - 1; i >= 0; i--) { const m = bot[i].body.match(re); if (m) return m[1]; } return ''; };
             const origDue = marker(/<!-- original-due:(\d{4}-\d{2}-\d{2}) -->/);
             const start = marker(/<!-- start:(\d{4}-\d{2}-\d{2}) -->/);
             const submitted = marker(/<!-- submitted:(\d{4}-\d{2}-\d{2}) -->/);
@@ -52,6 +53,8 @@ jobs:
             const field = (label) => { const re = new RegExp('###\\s+' + esc(label) + '\\s*\\n+([\\s\\S]*?)(?=\\n###\\s|$)', 'i'); const m = body.match(re); return m ? m[1].trim() : ''; };
             const venture = field('Venture');
             const reward = field('Reward type');
+            const role = field('Role');
+            const evidence = lastMarker(/<!-- evidence:([^\n]*?) -->/);
             const agreedOn = new Date(issue.created_at).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
 
             const proj = (await gql(`query { organization(login:"Ighodalo-Labs") { projectV2(number:1) { id fields(first:60) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } } } } } }`)).organization.projectV2;
@@ -94,6 +97,8 @@ jobs:
             await setVal('Status', status);
             await setVal('Venture', venture);
             await setVal('Reward type', reward);
+            await setVal('Role', role);
+            await setVal('Evidence', evidence);
             await setVal('Original due date', origDue);
             await setVal('Agreed on', agreedOn);
             await setVal('Submitted on', submitted);
