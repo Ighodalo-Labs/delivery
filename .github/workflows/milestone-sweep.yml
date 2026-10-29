@@ -29,7 +29,7 @@ jobs:
               catch (e) { await github.rest.issues.createLabel({ ...context.repo, name, color, description }); }
             };
             const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open', labels: 'type:milestone', per_page: 100 });
-            const overdue = [], dueSoon = [], waiting = [];
+            const overdue = [], dueSoon = [], waiting = [], noDate = [];
             for (const issue of issues) {
               if (issue.pull_request) continue;
               const labels = issue.labels.map((l) => l.name);
@@ -38,7 +38,7 @@ jobs:
               const bot = comments.filter((c) => c.user && c.user.login === 'github-actions[bot]');
               const marker = (re) => { for (const c of bot) { const m = c.body.match(re); if (m) return m[1]; } return ''; };
               const origDue = marker(/<!-- original-due:(\d{4}-\d{2}-\d{2}) -->/);
-              if (!origDue) continue;
+              if (!origDue) { noDate.push('- #' + issue.number + ' ' + issue.title.replace(/^\[Milestone\]\s*/, '')); continue; }
               const paused = bot.reduce((s, c) => { const x = c.body.match(/<!-- pause:(\d+) -->/); return s + (x ? parseInt(x[1], 10) : 0); }, 0);
               const effDue = addDays(origDue, paused);
               const owner = (issue.assignees && issue.assignees[0]) ? '@' + issue.assignees[0].login : '';
@@ -49,7 +49,12 @@ jobs:
 
               if (submitted) {
                 if (has('overdue')) { try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: issue.number, name: 'overdue' }); } catch (e) {} }
-                if (!checked) waiting.push(line);
+                let lastEvent = '';
+                for (let i = bot.length - 1; i >= 0 && !lastEvent; i--) {
+                  if (/<!-- resubmitted -->/.test(bot[i].body)) lastEvent = 'resubmitted';
+                  else if (/<!-- rework -->/.test(bot[i].body)) lastEvent = 'rework';
+                }
+                if (!checked && (!has('check:rework') || lastEvent === 'resubmitted')) waiting.push(line);
                 continue;
               }
               if (today > effDue) {
@@ -101,6 +106,7 @@ jobs:
                 '### Numbers for the last 7 days\n\n' + numbers.join('\n'),
                 section('Overdue', overdue),
                 section('Due in the next 7 days', dueSoon),
-                section('Submitted and waiting for check', waiting)
+                section('Submitted and waiting for check', waiting),
+                section('Needs a valid date (the clock has not started)', noDate)
               ].join('\n') });
             }

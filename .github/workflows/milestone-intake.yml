@@ -1,13 +1,13 @@
 name: Milestone intake
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
 permissions:
   issues: write
   contents: read
 jobs:
   intake:
-    if: ${{ contains(github.event.issue.labels.*.name, 'type:milestone') }}
+    if: ${{ contains(github.event.issue.labels.*.name, 'type:milestone') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
@@ -15,6 +15,10 @@ jobs:
           script: |
             const issue = context.payload.issue;
             const body = issue.body || '';
+            if (context.payload.action === 'edited') {
+              const prior = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: issue.number, per_page: 100 });
+              if (prior.some((c) => c.user && c.user.login === 'github-actions[bot]' && /<!-- original-due:/.test(c.body))) return;
+            }
             const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const field = (label) => {
               const re = new RegExp('###\\s+' + esc(label) + '\\s*\\n+([\\s\\S]*?)(?=\\n###\\s|$)', 'i');

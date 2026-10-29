@@ -79,7 +79,7 @@ jobs:
                 return;
               }
               if (has('submitted:on-time') || has('submitted:late')) {
-                await say('Resubmission noted on ' + today + '. The first submission stays on record.' + (evidence ? '\n\nNew proof: ' + evidence + '\n\n<!-- evidence:' + evidence + ' -->' : ''));
+                await say('Resubmission noted on ' + today + '. The first submission stays on record.' + (evidence ? '\n\nNew proof: ' + evidence + '\n\n<!-- evidence:' + evidence + ' -->' : '') + '\n\n<!-- resubmitted -->');
                 await react('+1');
                 return;
               }
@@ -171,11 +171,11 @@ jobs:
               }
             } else {
               if (firstDone) {
-                await say('More rework recorded. The first check result stays on record.');
+                await say('More rework recorded. The first check result stays on record.\n\n<!-- rework -->');
               } else {
                 await addLabel('check:rework', 'e99695', 'Needed rework at the first check');
                 await addLabel('bonus:missed', 'b60205', 'On-Time Bonus not earned');
-                await say('**Rework needed at the first check.** Please see the notes above. The stipend is still due once it passes. The On-Time Bonus does not apply.');
+                await say('**Rework needed at the first check.** Please see the notes above. The stipend is still due once it passes. The On-Time Bonus does not apply.\n\n<!-- rework -->');
               }
             }
             await react('+1');

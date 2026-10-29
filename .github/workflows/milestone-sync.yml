@@ -1,7 +1,7 @@
 name: Milestone sync
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
   issue_comment:
     types: [created]
 permissions:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   sync:
-    if: ${{ !github.event.issue.pull_request && contains(github.event.issue.labels.*.name, 'type:milestone') && (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/')) }}
+    if: ${{ !github.event.issue.pull_request && contains(github.event.issue.labels.*.name, 'type:milestone') && (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/')) && (github.event_name == 'issue_comment' || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
@@ -21,8 +21,18 @@ jobs:
         with:
           script: |
             const issueNumber = context.payload.issue.number;
-            const isOpen = context.eventName === 'issues';
-            await new Promise((r) => setTimeout(r, 6000));
+            const isOpen = context.eventName === 'issues' && context.payload.action === 'opened';
+            const firstLine = context.eventName === 'issue_comment' ? String(context.payload.comment.body || '').split('\n')[0].trim() : '';
+            const knownCmd = /^\/(submit|done|pause|pass|approve|rework|redo|rescope)(\s|$)/i.test(firstLine);
+            if (isOpen || knownCmd) {
+              const since = knownCmd ? context.payload.comment.created_at : '';
+              for (let i = 0; i < 12; i++) {
+                const cs = await github.rest.issues.listComments({ ...context.repo, issue_number: issueNumber, per_page: 100 });
+                if (cs.data.some((c) => c.user && c.user.login === 'github-actions[bot]' && c.created_at >= since)) break;
+                await new Promise((r) => setTimeout(r, 4000));
+              }
+              await new Promise((r) => setTimeout(r, 2000));
+            }
 
             const gql = async (query, variables) => {
               const res = await fetch('https://api.github.com/graphql', {
@@ -55,6 +65,11 @@ jobs:
             const reward = field('Reward type');
             const role = field('Role');
             const evidence = lastMarker(/<!-- evidence:([^\n]*?) -->/);
+            let lastEvent = '';
+            for (let i = bot.length - 1; i >= 0 && !lastEvent; i--) {
+              if (/<!-- resubmitted -->/.test(bot[i].body)) lastEvent = 'resubmitted';
+              else if (/<!-- rework -->/.test(bot[i].body)) lastEvent = 'rework';
+            }
             const agreedOn = new Date(issue.created_at).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
 
             const proj = (await gql(`query { organization(login:"Ighodalo-Labs") { projectV2(number:1) { id fields(first:60) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } } } } } }`)).organization.projectV2;
@@ -90,7 +105,7 @@ jobs:
 
             let status = '';
             if (has('check:first-pass') || has('check:final-pass')) status = 'Done';
-            else if (has('check:rework')) status = 'In progress';
+            else if (has('check:rework')) status = lastEvent === 'resubmitted' ? 'Ready for check' : 'In progress';
             else if (has('submitted:on-time') || has('submitted:late')) status = 'Ready for check';
             else if (isOpen) status = 'Agreed';
 
