@@ -1,11 +1,11 @@
 [
   {
-    "enabled": true,
-    "title": "[SIM] Weekly content",
-    "venture": "Ola Visuals",
+    "enabled": false,
+    "title": "Weekly content",
+    "venture": "Other",
     "role": "Content",
     "reward": "Time-based",
-    "owner": "Desmath3",
+    "owner": "github-username",
     "reviewer": "",
     "deliverable": "This week's agreed posts are live.",
     "why": "Steady posting builds the audience.",
