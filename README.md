@@ -31,7 +31,7 @@ The form asks for:
 ## How pay works
 
 - **Stipend.** Paid when the milestone passes its definition of done. Always.
-- **On-Time Bonus.** Paid on top when the milestone is submitted by the agreed date and passes the first check.
+- **On-Time Bonus.** Paid on top when the milestone is submitted by the agreed date and passes the first check. For now it is 10% of the milestone amount. It is there to encourage everyone to finish agreed work on time.
 
 The bonus never replaces the stipend. Missing the bonus does not reduce the stipend. Amounts are not kept here.
 
