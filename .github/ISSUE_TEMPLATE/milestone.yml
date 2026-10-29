@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Agree the date together before work starts. If a date looks too tight, say so now. The stipend is paid when this passes the definition of done. The On-Time Bonus is paid on top when it is submitted by the agreed date and passes the first check.
+        Agree the date together before work starts. If a date looks too tight, say so now. The stipend is paid when this passes the definition of done. The On-Time Bonus (10% of the milestone amount, for now) is paid on top when it is submitted by the agreed date and passes the first check.
 
         This page can be read by anyone. Do not write passwords, keys, client names or private strategy here. Describe the work in plain words.
   - type: dropdown
@@ -46,15 +46,6 @@ body:
         - Events
         - Founder work
         - Other
-    validations:
-      required: true
-  - type: dropdown
-    id: reward
-    attributes:
-      label: Reward type
-      options:
-        - Milestone-based
-        - Time-based
     validations:
       required: true
   - type: textarea
