@@ -7,16 +7,44 @@ body:
     attributes:
       value: |
         Agree the date together before work starts. If a date looks too tight, say so now. The stipend is paid when this passes the definition of done. The On-Time Bonus is paid on top when it is submitted by the agreed date and passes the first check.
+
+        This page can be read by anyone. Do not write passwords, keys, client names or private strategy here. Describe the work in plain words.
   - type: dropdown
     id: venture
     attributes:
       label: Venture
       options:
+        - Ighodalo Labs (studio)
         - Ighodalo Labs Website
         - MyPropGuard
         - MyPropGuard On-chain
         - Tickwire
         - Cleanse.ng
+        - Qualify Africa
+        - Venture Library
+        - Briston
+        - OBN Nation
+        - Terrace
+        - PitchGrid
+        - Ola Visuals
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      description: What kind of work is this?
+      options:
+        - Engineering
+        - Design
+        - Marketing
+        - Content
+        - Social media
+        - Operations
+        - People and Culture
+        - Events
+        - Founder work
         - Other
     validations:
       required: true
@@ -46,7 +74,7 @@ body:
     id: dod
     attributes:
       label: Definition of done
-      description: A checklist. Every line must be something you can test with yes or no.
+      description: A checklist. Every line must be something anyone can answer with yes or no. Example for content "5 posts are live and each has a link". Example for design "Logo files (SVG and PNG) are in the shared folder". Example for code "The login works on a phone and a laptop".
       value: |
         - [ ]
         - [ ]
@@ -57,7 +85,7 @@ body:
     id: verify
     attributes:
       label: How it will be checked
-      description: The exact steps the reviewer will follow.
+      description: The steps the reviewer will follow. Example "Open each link and read the post" or "Log in on a phone".
     validations:
       required: true
   - type: input
@@ -67,16 +95,24 @@ body:
     validations:
       required: true
   - type: input
+    id: reviewer
+    attributes:
+      label: Reviewer (GitHub username, optional)
+      description: Who checks the work. Leave empty and the Studio Lead checks. It cannot be the owner.
+    validations:
+      required: false
+  - type: input
     id: start
     attributes:
-      label: Start date (YYYY-MM-DD)
+      label: Start date (YYYY-MM-DD, optional)
+      description: Leave empty to start today.
     validations:
-      required: true
+      required: false
   - type: input
     id: due
     attributes:
-      label: Agreed due date (YYYY-MM-DD)
-      description: A real date, not "before launch". Agreed by both sides.
+      label: Agreed due date
+      description: A real date like 2026-11-20, or a number of days like "14 days" counted from the start. Not "before launch". Agreed by both sides.
     validations:
       required: true
   - type: checkboxes
