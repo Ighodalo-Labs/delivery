@@ -36,7 +36,6 @@ jobs:
               const body = [
                 '### Venture', r.venture || 'Other',
                 '### Role', r.role || 'Other',
-                '### Reward type', r.reward || 'Milestone-based',
                 '### Deliverable', r.deliverable || r.title,
                 '### Why it matters', r.why || 'Repeating work.',
                 '### Definition of done', dod,
