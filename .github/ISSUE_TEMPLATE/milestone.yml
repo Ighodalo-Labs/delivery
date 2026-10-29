@@ -103,7 +103,7 @@ body:
     id: due
     attributes:
       label: Agreed due date
-      description: A real date like 2026-11-20, or a number of days like "14 days" counted from the start. Not "before launch". Agreed by both sides.
+      description: A real date like 2026-11-20, or a number of days like "14 days" counted from the start. Not "before launch". One month at most from the start. Agreed by both sides.
     validations:
       required: true
   - type: checkboxes
