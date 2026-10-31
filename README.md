@@ -71,6 +71,11 @@ The system sets them. You do not need to move anything.
 | Done | Passed the definition of done. |
 | Blocked | Cannot move. The reason is in a comment. The Studio Lead sets this one by hand. |
 
+## Cancel or change a milestone
+
+- To cancel a milestone, close the issue. It shows as **Cancelled** on the board and no pass is recorded. Reopen it to bring it back.
+- To change the owner, change the **Assignee** on the issue.
+
 ## Examples by role
 
 A good definition of done is a list of yes or no lines. Always add proof when you submit.
