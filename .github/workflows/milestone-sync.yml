@@ -1,7 +1,7 @@
 name: Milestone sync
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, closed, reopened]
   issue_comment:
     types: [created]
 permissions:
@@ -24,6 +24,10 @@ jobs:
             const isOpen = context.eventName === 'issues' && context.payload.action === 'opened';
             const firstLine = context.eventName === 'issue_comment' ? String(context.payload.comment.body || '').split('\n')[0].trim() : '';
             const knownCmd = /^\/(submit|done|pause|pass|approve|rework|redo|rescope)(\s|$)/i.test(firstLine);
+            const act = context.payload.action;
+            if (context.eventName === 'issues' && (act === 'closed' || act === 'reopened')) {
+              await new Promise((r) => setTimeout(r, 8000));
+            }
             if (isOpen || knownCmd) {
               const since = knownCmd ? context.payload.comment.created_at : '';
               for (let i = 0; i < 12; i++) {
@@ -108,6 +112,8 @@ jobs:
             else if (has('check:rework')) status = lastEvent === 'resubmitted' ? 'Ready for check' : 'In progress';
             else if (has('submitted:on-time') || has('submitted:late')) status = 'Ready for check';
             else if (isOpen) status = 'Agreed';
+            else if (act === 'reopened') status = 'In progress';
+            if (issue.state === 'closed' && !(has('check:first-pass') || has('check:final-pass'))) status = 'Cancelled';
 
             await setVal('Status', status);
             await setVal('Venture', venture);
@@ -128,7 +134,7 @@ jobs:
               }
             } catch (e) { notes.push('Start/Target date (issue fields): ' + e.message.slice(0, 600)); }
             await setVal('First check', has('check:first-pass') ? 'Pass' : (has('check:rework') ? 'Rework needed' : 'Pending'));
-            await setVal('On-Time Bonus', has('bonus:earned') ? 'Earned' : (has('bonus:missed') ? 'Missed' : 'Pending'));
+            await setVal('On-Time Bonus', has('bonus:earned') ? 'Earned' : (has('bonus:missed') ? 'Missed' : (status === 'Cancelled' ? 'Not applicable' : 'Pending')));
 
             if (notes.length) {
               await github.rest.issues.createComment({ ...context.repo, issue_number: issueNumber, body: '**Sync note.** Some project fields could not be updated:\n\n- ' + notes.join('\n- ') });
